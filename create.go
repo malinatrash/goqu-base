@@ -1,28 +1,51 @@
-package gb
+package goqubase
 
 import (
 	"context"
 	"fmt"
-
-	"github.com/georgysavva/scany/v2/pgxscan"
+	"time"
 )
 
-func (r *BaseRepo[T]) Create(ctx context.Context, model *T) error {
+func (r *BaseRepo[T]) Create(ctx context.Context, model *T, opts ...func(*CreateOptions)) (id interface{}, err error) {
 
-	ds := dialect.
-		Insert(r.table).
-		Rows(model).
-		Returning("*").
-		Prepared(true)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-	sql, args, err := ds.ToSQL()
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrBuildSQL, err)
+	options := applyCreateOptions(opts...)
+
+	var returnID interface{}
+
+	if options.ReturnID {
+		ds := dialect.
+			Insert(r.table).
+			Rows(model).
+			Returning("id").
+			Prepared(true)
+
+		sql, args, err := ds.ToSQL()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrBuildSQL, err)
+		}
+
+		if err := r.pool.QueryRow(ctx, sql, args...).Scan(&returnID); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInsertFailed, err)
+		}
+	} else {
+
+		ds := dialect.
+			Insert(r.table).
+			Rows(model).
+			Prepared(true)
+
+		sql, args, err := ds.ToSQL()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrBuildSQL, err)
+		}
+
+		if _, err := r.pool.Exec(ctx, sql, args...); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInsertFailed, err)
+		}
 	}
 
-	if err := pgxscan.Get(ctx, r.pool, model, sql, args...); err != nil {
-		return fmt.Errorf("%w: %v", ErrInsertFailed, err)
-	}
-
-	return nil
+	return returnID, nil
 }

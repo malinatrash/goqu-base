@@ -153,25 +153,188 @@ func (r *BaseRepo[T]) FindMany(ctx context.Context, page, limit int32, filters m
 
 ```go
 // Get all users (first page, 10 per page)
-users, totalPages, err := userRepo.FindMany(ctx, 1, 10, nil)
-if err != nil {
-    log.Fatal(err)
-}
+users, totalPages, err := userRepo.FindMany(ctx, 1, 10)
 
 // Get users with filters
-users, totalPages, err = userRepo.FindMany(ctx, 1, 10, map[string]any{
-    "age": 30,
-})
+users, totalPages, err = userRepo.FindMany(ctx, 1, 10,
+    map[string]any{"age": 30},
+)
 
 // Get users older than 25
-users, totalPages, err = userRepo.FindMany(ctx, 1, 10, map[string]any{
-    "age": goqu.Op{"gt": 25},
-})
+users, totalPages, err = userRepo.FindMany(ctx, 1, 10,
+    map[string]any{"age": goqu.Op{"gt": 25}},
+)
 
 fmt.Printf("Found %d users, total pages: %d\n", len(users), totalPages)
 ```
 
-### Update
+### FindMany
+
+Расширенный поиск с дополнительными опциями для более гибкой работы с данными.
+
+```go
+func (r *BaseRepo[T]) FindMany(ctx context.Context, page, limit int32, opts ...func(*FindManyOptions)) ([]T, int32, error)
+```
+
+#### Доступные опции
+
+##### Фильтры (Filters)
+
+```go
+// Фильтрация по полям
+WithFilters(map[string]any{"status": "active"})
+
+// Фильтрация с использованием goqu операторов
+WithFilters(map[string]any{
+    "age": goqu.Op{"gte": 18},
+    "name": goqu.Op{"like": "John%"},
+})
+```
+
+##### Сортировка (OrderBy)
+
+```go
+// Сортировка по одному полю по возрастанию
+WithOrderBy("created_at", false) // false = ASC, true = DESC
+
+// Сортировка по нескольким полям
+WithOrderBy("created_at", false),
+WithOrderBy("name", true),
+```
+
+##### Выбор полей (Select)
+
+```go
+// Выбрать только нужные поля для оптимизации
+WithSelect("id", "name", "email", "created_at")
+```
+
+##### Дополнительные условия (Conditions)
+
+```go
+// Добавить кастомные WHERE условия
+WithCondition(goqu.C("status").Eq("active")),
+WithCondition(goqu.C("age").Gte(18)),
+```
+
+##### Группировка (GroupBy)
+
+```go
+// Группировка по полям
+WithGroupBy("status", "category")
+```
+
+##### Условия группировки (Having)
+
+```go
+// Условия для группировки
+WithHaving(goqu.COUNT("*").Gt(5))
+```
+
+##### Текстовый поиск (Search)
+
+```go
+// Поиск по нескольким полям с частичным совпадением
+WithSearch("john", "name", "email", "description")
+```
+
+##### Фильтр по датам (DateRange)
+
+```go
+from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+to := time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC)
+
+// Фильтр по диапазону дат
+WithDateRange("created_at", &from, &to)
+```
+
+##### JOIN операции
+
+```go
+// LEFT JOIN с другой таблицей
+WithJoin("user_profiles", "p",
+    goqu.C("users.profile_id").Eq(goqu.C("p.id")),
+    JoinLeft)
+
+// INNER JOIN
+WithJoin("orders", "o",
+    goqu.C("users.id").Eq(goqu.C("o.user_id")),
+    JoinInner)
+```
+
+##### Блокировка для конкурентного доступа
+
+```go
+// Пессимистическая блокировка
+WithLock(LockForUpdate)
+
+// Блокировка без блокировки ключей
+WithLock(LockForNoKeyUpdate)
+```
+
+##### Специальные режимы
+
+```go
+// Отключить пагинацию (получить все результаты)
+WithNoPagination()
+
+// Получить только количество записей
+WithCountOnly()
+
+// Получить уникальные записи
+WithDistinct()
+
+// Максимальное количество результатов
+WithMaxResults(1000)
+```
+
+#### Примеры использования
+
+```go
+// Поиск с сортировкой и выбором полей
+users, totalPages, err := repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"status": "active"}),
+    WithOrderBy("created_at", false),
+    WithSelect("id", "name", "email"),
+)
+
+// Поиск с фильтром по датам
+users, totalPages, err = repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"status": "active"}),
+    WithDateRange("created_at", &from, &to),
+)
+
+// Поиск с JOIN'ом и фильтром по датам
+users, totalPages, err = repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"type": "premium"}),
+    WithJoin("user_profiles", "p", 
+        goqu.C("users.profile_id").Eq(goqu.C("p.id")), 
+        JoinLeft),
+    WithDateRange("users.created_at", &from, &to),
+    WithSelect("users.*", "p.first_name", "p.last_name"),
+)
+
+// Поиск с группировкой и агрегацией
+users, totalPages, err = repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"status": "active"}),
+    WithGroupBy("status"),
+    WithHaving(goqu.COUNT("*").Gt(5)),
+)
+
+// Текстовый поиск с отключением пагинации
+users, totalPages, err = repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"type": "premium"}),
+    WithSearch("enterprise", "name", "description"),
+    WithNoPagination(),
+    WithMaxResults(100),
+)
+
+// Только подсчет количества записей
+_, totalPages, err = repo.FindMany(ctx, 1, 10,
+    WithFilters(map[string]any{"status": "active"}),
+    WithCountOnly(),
+)
+```
 
 Update a record by its model (uses the ID field).
 

@@ -5,6 +5,7 @@ go 1.24.1
 require (
 	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/georgysavva/scany/v2 v2.1.4
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 )
 
