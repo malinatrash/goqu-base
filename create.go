@@ -1,4 +1,4 @@
-package goqubase
+package gb
 
 import (
 	"context"
@@ -15,6 +15,7 @@ func (r *BaseRepo[T]) Create(ctx context.Context, model *T, opts ...func(*Create
 
 	var returnID interface{}
 
+	// Если нужно вернуть ID, добавляем Returning("id")
 	if options.ReturnID {
 		ds := dialect.
 			Insert(r.table).
@@ -31,7 +32,7 @@ func (r *BaseRepo[T]) Create(ctx context.Context, model *T, opts ...func(*Create
 			return nil, fmt.Errorf("%w: %v", ErrInsertFailed, err)
 		}
 	} else {
-
+		// Обычное создание без возврата ID
 		ds := dialect.
 			Insert(r.table).
 			Rows(model).

@@ -1,4 +1,4 @@
-package goqubase
+package gb
 
 type Pagination struct {
 	Page  int32

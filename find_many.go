@@ -1,4 +1,4 @@
-package goqubase
+package gb
 
 import (
 	"context"
@@ -16,27 +16,33 @@ func (r *BaseRepo[T]) FindMany(
 
 	options := applyOptions(opts...)
 
+	// Если указан MaxResults, используем его вместо limit
 	if options.MaxResults > 0 && (options.NoPagination || options.CountOnly) {
 		limit = options.MaxResults
 	}
 
+	// Если пагинация отключена или запрошено только количество, устанавливаем большие значения
 	if options.NoPagination || options.CountOnly {
 		page = 1
-		limit = 1000000
+		limit = 1000000 // Достаточно большое значение для получения всех результатов
 	} else if page < 1 || limit < 1 {
 		return nil, 0, ErrInvalidPagination
 	}
 
+	// Строим базовый запрос для подсчета
 	countDs := dialect.From(r.table).Select(goqu.COUNT("*"))
 
+	// Добавляем фильтры
 	if options.Filters != nil && len(options.Filters) > 0 {
 		countDs = countDs.Where(goqu.Ex(options.Filters))
 	}
 
+	// Добавляем дополнительные условия
 	for _, condition := range options.Conditions {
 		countDs = countDs.Where(condition)
 	}
 
+	// Добавляем поиск
 	if options.Search != nil && options.Search.Query != "" {
 		searchConditions := make([]goqu.Expression, 0, len(options.Search.Fields))
 		for _, field := range options.Search.Fields {
@@ -47,6 +53,7 @@ func (r *BaseRepo[T]) FindMany(
 		}
 	}
 
+	// Добавляем фильтр по датам
 	if options.DateRange != nil {
 		dateConditions := make([]goqu.Expression, 0, 2)
 		if options.DateRange.From != nil {
@@ -60,6 +67,7 @@ func (r *BaseRepo[T]) FindMany(
 		}
 	}
 
+	// Добавляем JOIN'ы
 	for _, join := range options.Joins {
 		switch join.Type {
 		case JoinInner:
@@ -83,6 +91,7 @@ func (r *BaseRepo[T]) FindMany(
 		return nil, 0, fmt.Errorf("%w: %v", ErrCountFailed, err)
 	}
 
+	// Если запрошено только количество, возвращаем пустой массив и количество страниц
 	if options.CountOnly {
 		totalPages := int32((totalRows + int64(limit) - 1) / int64(limit))
 		return nil, totalPages, nil
@@ -90,16 +99,20 @@ func (r *BaseRepo[T]) FindMany(
 
 	totalPages := int32((totalRows + int64(limit) - 1) / int64(limit))
 
+	// Если нет результатов, возвращаем пустой массив
 	if totalRows == 0 {
 		return []T{}, totalPages, nil
 	}
 
+	// Строим основной запрос для получения данных
 	ds := dialect.From(r.table)
 
+	// Добавляем DISTINCT если указано
 	if options.Distinct {
 		ds = ds.Distinct()
 	}
 
+	// Добавляем выбор полей
 	if len(options.Select) > 0 {
 		selectFields := make([]interface{}, len(options.Select))
 		for i, field := range options.Select {
@@ -108,14 +121,17 @@ func (r *BaseRepo[T]) FindMany(
 		ds = ds.Select(selectFields...)
 	}
 
+	// Добавляем фильтры
 	if options.Filters != nil && len(options.Filters) > 0 {
 		ds = ds.Where(goqu.Ex(options.Filters))
 	}
 
+	// Добавляем дополнительные условия
 	for _, condition := range options.Conditions {
 		ds = ds.Where(condition)
 	}
 
+	// Добавляем поиск
 	if options.Search != nil && options.Search.Query != "" {
 		searchConditions := make([]goqu.Expression, 0, len(options.Search.Fields))
 		for _, field := range options.Search.Fields {
@@ -126,6 +142,7 @@ func (r *BaseRepo[T]) FindMany(
 		}
 	}
 
+	// Добавляем фильтр по датам
 	if options.DateRange != nil {
 		dateConditions := make([]goqu.Expression, 0, 2)
 		if options.DateRange.From != nil {
@@ -139,6 +156,7 @@ func (r *BaseRepo[T]) FindMany(
 		}
 	}
 
+	// Добавляем JOIN'ы
 	for _, join := range options.Joins {
 		switch join.Type {
 		case JoinInner:
@@ -152,6 +170,7 @@ func (r *BaseRepo[T]) FindMany(
 		}
 	}
 
+	// Добавляем группировку
 	if len(options.GroupBy) > 0 {
 		groupFields := make([]interface{}, len(options.GroupBy))
 		for i, field := range options.GroupBy {
@@ -160,10 +179,12 @@ func (r *BaseRepo[T]) FindMany(
 		ds = ds.GroupBy(groupFields...)
 	}
 
+	// Добавляем условия для группировки (HAVING)
 	for _, having := range options.Having {
 		ds = ds.Having(having)
 	}
 
+	// Добавляем сортировку
 	if len(options.OrderBy) > 0 {
 		for _, order := range options.OrderBy {
 			orderCol := goqu.C(order.Field)
@@ -174,18 +195,20 @@ func (r *BaseRepo[T]) FindMany(
 			}
 		}
 	} else {
-
+		// Если сортировка не указана, сортируем по ID по умолчанию
 		ds = ds.Order(goqu.C("id").Asc())
 	}
 
+	// Добавляем пагинацию, если не отключена
 	if !options.NoPagination {
 		offset := (page - 1) * limit
 		ds = ds.Limit(uint(limit)).Offset(uint(offset))
 	}
 
+	// Добавляем блокировку
 	if options.Locking != nil {
 		ds = ds.Prepared(true)
-
+		// Блокировка добавляется к подготовленному запросу
 	}
 
 	sql, args, err := ds.Prepared(true).ToSQL()

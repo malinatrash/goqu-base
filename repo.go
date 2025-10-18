@@ -1,4 +1,4 @@
-package goqubase
+package gb
 
 import (
 	"github.com/doug-martin/goqu/v9"
