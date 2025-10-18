@@ -1,5 +1,7 @@
 package gb
 
+// Package types: Определения типов, опций и интерфейсов для репозитория
+
 import (
 	"time"
 

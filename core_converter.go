@@ -1,5 +1,7 @@
 package gb
 
+// Package core: Базовые структуры и утилиты для репозитория
+
 import (
 	"fmt"
 

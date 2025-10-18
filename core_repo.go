@@ -1,5 +1,7 @@
 package gb
 
+// Package core: Базовые структуры и утилиты для репозитория
+
 import (
 	"github.com/doug-martin/goqu/v9"
 	"github.com/jackc/pgx/v5/pgxpool"

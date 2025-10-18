@@ -1,5 +1,7 @@
 package gb
 
+// Package operations: Реализация операций CRUD для репозитория
+
 import (
 	"context"
 	"fmt"
